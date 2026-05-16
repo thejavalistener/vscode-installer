@@ -3,7 +3,7 @@
 # +---------+------------------------------------------------------------------+
 
 	# Espacio inicial requerido
-    $FREESPACE_NO_CACHE = 10
+    $FREESPACE_NO_CACHE = 5
     $FREESPACE_WITH_CACHE = 2
 
     # Disco de instalacion
@@ -34,7 +34,7 @@
 # | CORE    | Console output                                                   |
 # +---------+------------------------------------------------------------------+
 
-function cMenu($options, $defaultIndex = 0,$timeoutSeconds = -1)
+function cMenu($options,$indent=3,$defaultIndex = 0,$timeoutSeconds = -1)
 {
     if($NULL -eq $options -or $options.Count -eq 0)
     {
@@ -68,11 +68,11 @@ function cMenu($options, $defaultIndex = 0,$timeoutSeconds = -1)
 
                 if($i -eq $index)
                 {
-                    $line = " >[$text]"
+                    $line = (" " * $indent)+">[$text]"
                 }
                 else
                 {
-                    $line = "   $text "
+                    $line = (" " * $indent)+"  $text "
                 }
 
                 Write-Host ($line.PadRight([Console]::WindowWidth - 1)) -NoNewline
@@ -174,11 +174,26 @@ function cPause($millis=500)
     Start-Sleep -Milliseconds $millis    
 }
 
+#function cStep($mssg,$delay=1000)
+#{
+#    Write-Host `n$mssg -ForegroundColor Cyan
+#    cPause $delay
+#}
+
 function cStep($mssg,$delay=1000)
 {
-    Write-Host $mssg -ForegroundColor Cyan
+    if ($null -eq $script:cStepNumber)
+    {
+        $script:cStepNumber = 0
+    }
+
+    $script:cStepNumber++
+
+    [Console]::WriteLine()
+    Write-Host "[$script:cStepNumber] $mssg" -ForegroundColor Cyan
     cPause $delay
 }
+
 
 function cAsk($mssg,$delay=500)
 {
@@ -195,12 +210,6 @@ function cError($mssg,$delay=1000)
 function cWarn($mssg,$delay=500)
 {
     Write-Host $mssg -ForegroundColor Yellow
-    cPause $delay
-}
-
-function cStep($mssg,$delay=1000)
-{
-    Write-Host $mssg -ForegroundColor Cyan
     cPause $delay
 }
 
@@ -312,7 +321,10 @@ function folderDelete($path)
     if (folderExists $path)
     {
         Remove-Item -LiteralPath $path -Recurse -Force
+        return $true
     }
+
+    return $false
 }
 
 function folderIsLocked($targetPath)
@@ -356,31 +368,6 @@ function folderGetSubfolders($path)
 # +---------+------------------------------------------------------------------+
 # | CORE    | File                                                             |
 # +---------+------------------------------------------------------------------+
-
-function gdriveReadFileHeader($url)
-{
-    $response = Invoke-WebRequest `
-        -Uri $url `
-        -Method Head `
-        -UseBasicParsing
-
-    $cd = $response.Headers["Content-Disposition"]
-
-    $name = $null
-    if ($cd -match 'filename="(.+)"')
-    {
-        $name = $matches[1]
-    }
-
-    $dt = [datetime]::Parse($response.Headers["Last-Modified"])
-
-    return @{
-        name = $name
-        date  = $dt.ToString("yyyy-MM-dd")
-        hour   = $dt.ToString("HH:mm:ss")
-        size   = [long]$response.Headers["Content-Length"]
-    } | ConvertTo-Json
-}
 
 function fileCopy($filenameSource, $target)
 {
@@ -461,7 +448,7 @@ function fileUnzip($zipPath, $dest, $cleanDestFolderIfExists=$true)
 {
     if ($cleanDestFolderIfExists -and (folderExists $dest))
     {
-        folderDelete $dest
+        $null = folderDelete $dest
     }
 
     # El parámetro -Force evita el error si el directorio ya existe
@@ -483,7 +470,7 @@ function file7Unzip($zipPath, $dest, $szExe)
 {
     if (folderExists $dest)
     {
-        folderDelete $dest
+        $null = folderDelete $dest
     }
 
     New-Item -ItemType Directory -Path $dest | Out-Null
@@ -668,7 +655,7 @@ function cacheRestaurar($source, $dest)
         if ($copiar)
         {
             Copy-Item -LiteralPath $file.FullName -Destination $target -Force
-            Write-Host "  -> $relative $accion." -ForegroundColor Yellow
+            Write-Host " --> $relative $accion." -ForegroundColor Yellow
         }
     }
 
@@ -680,10 +667,16 @@ function cacheRestaurar($source, $dest)
         $relative = $d.FullName.Replace($dest, "").TrimStart('\')
         $srcFile  = Join-Path $source $relative
 
+        ## OJO CON ESTE IF LO PUSE RECIÉN
+        #if ($d.Name -like "*.lnk")
+        #{
+        #    continue
+        #}
+
         if (!(Test-Path -LiteralPath $srcFile))
         {
             Remove-Item -LiteralPath $d.FullName -Force
-            Write-Host "  -> $relative eliminado." -ForegroundColor Yellow
+            Write-Host " --> $relative eliminado." -ForegroundColor Yellow
         }
     }
 
@@ -698,7 +691,7 @@ function cacheRestaurar($source, $dest)
         if (!(Test-Path -LiteralPath $srcDir))
         {
             Remove-Item -LiteralPath $d.FullName -Recurse -Force
-            Write-Host "  -> $relative eliminado." -ForegroundColor Yellow
+            Write-Host " --> $relative eliminado." -ForegroundColor Yellow
         }
     }
 
@@ -706,26 +699,57 @@ function cacheRestaurar($source, $dest)
 }
 
 # +---------+------------------------------------------------------------------+
-# | NO CORE | VSCode                                                           |
+# | NO CORE | GDrive / GitHub                                                  |
 # +---------+------------------------------------------------------------------+
 
-#function vscodeObtenerManifest($manifestUrl)
-#{
-#    try {
-#        $response = Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing
-#        $json = $response.Content | ConvertFrom-Json
-#        
-#        if($NULL -eq $($json.active_env)) 
-#        { 
-#            return $NULL 
-#        }
-#        return $json
-#    }
-#    catch 
-#    {
-#        return $NULL
-#    }
-#}
+function gdriveReadFileHeader($url)
+{
+    $response = Invoke-WebRequest `
+        -Uri $url `
+        -Method Head `
+        -UseBasicParsing
+
+    $cd = $response.Headers["Content-Disposition"]
+
+    $name = $null
+    if ($cd -match 'filename="(.+)"')
+    {
+        $name = $matches[1]
+    }
+
+    $dt = [datetime]::Parse($response.Headers["Last-Modified"])
+
+    return @{
+        name = $name
+        date  = $dt.ToString("yyyy-MM-dd")
+        hour   = $dt.ToString("HH:mm:ss")
+        size   = [long]$response.Headers["Content-Length"]
+    } | ConvertTo-Json
+}
+
+function githubReadFileHeader($url)
+{
+    $response = Invoke-WebRequest `
+        -Uri $url `
+        -Method Head `
+        -UseBasicParsing
+
+    $dt = [datetime]::Parse($response.Headers["Last-Modified"])
+
+    return [pscustomobject]@{
+        name = [System.IO.Path]::GetFileName($url)
+        date  = $dt.ToString("yyyy-MM-dd")
+        hour   = $dt.ToString("HH:mm:ss")
+        size   = [long]$response.Headers["Content-Length"]
+    }
+}
+
+
+
+
+# +---------+------------------------------------------------------------------+
+# | NO CORE | VSCode                                                           |
+# +---------+------------------------------------------------------------------+
 
 function vscodeObtenerManifest($manifestUrl)
 {
@@ -795,9 +819,9 @@ function vscodeObtenerVersionLocal($cacheRoot)
 
 function vscodeActualizarORestaurarVersion($localVer,$remoteVer)
 {
-    cAsk "Desea restaurar $localVer o actualizar a $($remoteVer)?"
+    cAsk " --> Desea restaurar $localVer o actualizar a $($remoteVer)?"
     $options = @("Restaurar","Actualizar")
-    $op = cMenu $options 0
+    $op = cMenu $options -defaultIndex 0 -indent 5
     return $op
 }
 
@@ -868,11 +892,20 @@ function downloadEsperarDescarga($zipPath)
     cInfo " --> Descarga finalizada: $zipPath."
 }
 
+function navegadorAbrir($url)
+{
+    do {
+        $k = [System.Console]::ReadKey($true)
+    } while ($k.Key -ne [System.ConsoleKey]::Enter)
+
+    Start-Process $url    
+}
+
+
 function downloadAbrirNavegador($url)
 {
     cInfo  " --> Se abrira el navegador para descargar el archivo."
-    cBlink " --> IMPORTANTE: NO CIERRE ESTA VENTANA." 2000
-    cOut   " --> Se reanudara solo al detectar el archivo."
+    cBlink " --> IMPORTANTE: NO CIERRE ESTA VENTANA." 2500
     cAsk  " --> Presione [ENTER] para descargar..." 
 
     do {
@@ -897,24 +930,31 @@ function mainRestaurar($cacheFolder,$vscodeHome,$vscodeWorkspace,$userFolder)
 
     cStep "Restaurando VSCode desde cache."
     cacheRestaurar $cacheFolder $vscodeHome
-
-    # autocopiado y lnk
-    mainAutocopiarScript $USER_FOLDER $VSCODE_HOME
-
-    # ejecuto y verifico que todo salio bien
-    Start-Process "$VSCODE_HOME\RunVSCode.bat"
 }
 
 function mainCrearRestaurar($zipPath,$cacheRoot,$cacheExpanded,$cacheFolder,$vscodeHome,$vscodeWorkspace,$userFolder,$exe7z)
 {
     #voy a crear un cache, borro los viejos
-    folderDelete $cacheRoot
+    $null = folderDelete $cacheRoot
 
     cStep "Creando cache de VSCode."
     cacheCrear $zipPath $cacheRoot $cacheExpanded $cacheFolder $exe7z
 
-    # borro el home porque no puedo saber a qué versión corresponde 
-    folderDelete $vscodeHome
+    # borro el home porque no puedo saber a qué versión corresponde
+
+    if( folderExists $vscodeHome )
+    {
+        cStep "Eliminando instalacion anterior" 
+        if( folderDelete $vscodeHome ) 
+        {
+            cInfo " --> La instalacion anterior fue removida."
+        }
+        else
+        {
+            cError " --> Error intentando remover la instalacion anterior."
+        }
+        
+    }
 
     # invoco a restaurar
     mainRestaurar $cacheFolder $vscodeHome $vscodeWorkspace $userFolder
@@ -1061,7 +1101,7 @@ function vscodeVerificarActualizaciones($manifest, $localVer)
         if ($remoteVer -eq $localVer)
         {
             # cache = remoteVer => actualizado
-            cInfo " --> No hay nuevas actualizaciones. Version actual: $localVer."
+            cInfo " --> No hay actualizaciones. Version actual: $localVer."
         }
         else
         {
@@ -1087,18 +1127,21 @@ function mainAutocopiarScript($targetFolder, $targetLnk)
     $resolvedTarget = (Resolve-Path $targetFolder -ErrorAction SilentlyContinue).Path
     if ($null -eq $resolvedTarget) { $resolvedTarget = $targetFolder }
 
-    if ($currentFolder -eq $resolvedTarget)
-    {
-        return # Salimos de la función sin romper nada
-    }
+    #if ($currentFolder -eq $resolvedTarget)
+    #{
+    #    return # Salimos de la función sin romper nada
+    #}
 
     try 
     {
         # 1. Copiar el script a la carpeta destino
-        cInfo "Backup: $fullfileName."
+        cInfo " --> Backup: $fullfileName."
         
         # [SOLUCIÓN AL TRUE]: Casteamos a [void] o asignamos a $null para que no escupa "True" en consola
-        [void](fileCopy $fullfileName $targetFolder)
+        if ($currentFolder -ne $resolvedTarget)
+        {
+            [void](fileCopy $fullfileName $targetFolder)
+        }
 
         # 2. Calcular la ruta del nuevo script copiado
         $scriptName = [System.IO.Path]::GetFileName($fullfileName)
@@ -1117,7 +1160,7 @@ function mainAutocopiarScript($targetFolder, $targetLnk)
         }
 
         # 3. Crear el acceso directo (.lnk) real
-        cInfo "--> Acceso directo en: $shortcutFullPath"
+        cInfo " --> Acceso directo en: $shortcutFullPath"
         
         $wshShell = New-Object -ComObject WScript.Shell
         $shortcut = $wshShell.CreateShortcut($shortcutFullPath)
@@ -1129,12 +1172,50 @@ function mainAutocopiarScript($targetFolder, $targetLnk)
         
         $shortcut.Save()
         
-        cInfo "Proceso de copiado y acceso directo finalizado con exito."
+        cInfo " --> Proceso de copiado y acceso directo finalizado con exito."
     }
     catch 
     {
-        cError "No se pudo crear el acceso directo: $_"
+        cError " --> No se pudo crear el acceso directo: $_"
     }
+}
+
+function vscodeVerificarActualizacionesScript($manifest)
+{
+    $scriptPath = $PSCommandPath
+
+    if (-not (fileExists $scriptPath))
+    {
+        cWarn " --> No es posible verificar actualizaciones del script."
+        return
+    }
+
+    $localDate = (Get-Item -LiteralPath $scriptPath).LastWriteTime
+    $localDate = [datetime]::ParseExact($localDate.ToString("yyyy-MM-dd_HH:mm"), "yyyy-MM-dd_HH:mm", $null)
+
+    $remoteDate = [datetime]::ParseExact(
+        $manifest.script.last_update,
+        "yyyy-MM-dd_HH:mm",
+        $null
+    )
+
+    if ($remoteDate -gt $localDate)
+    {
+        cWarn " --> Nueva version del script disponible en:"
+        $url = $manifest.script.url 
+        cWarn " --> $url"
+        $url | Set-Clipboard
+        cInfo " --> Se copio la direccion al clipboard."
+    }
+}
+
+function vscodeFinalizaScript()
+{
+    # autocopiado y lnk
+    mainAutocopiarScript $USER_FOLDER $VSCODE_HOME
+
+    # ejecuto y verifico que todo salio bien
+    Start-Process "$VSCODE_HOME\RunVSCode.bat"    
 }
 
 function main()
@@ -1148,7 +1229,9 @@ function main()
     mainAsegurarCondicionesInicial $DRIVE_TO_INSTALL $sizeReq $VSCODE_HOME
 
     # leo el manifest 
-    $manifest = vscodeObtenerManifest $MANIFEST_URL   
+    $manifest = vscodeObtenerManifest $MANIFEST_URL 
+    #$manifest.active_env = "test"
+    vscodeVerificarActualizacionesScript $manifest
 
     # informo sobre las posibles actualizaciones
     vscodeVerificarActualizaciones $manifest $localVer
@@ -1166,6 +1249,7 @@ function main()
         $cacheExpanded = "$CACHE_ROOT\$localVer"
         $cacheFolder = "$cacheExpanded\vscode"
         mainRestaurar $cacheFolder $VSCODE_HOME $VSCODE_WORKSPACE $USER_FOLDER
+        vscodeFinalizaScript
         return
     }
 
@@ -1187,6 +1271,7 @@ function main()
             mainDescargarCrearRestaurar $remoteUrl $DOWNLOAD_FOLDER $remoteVer $remoteMD5 $CACHE_ROOT $VSCODE_HOME $VSCODE_WORKSPACE $USER_FOLDER
         }
 
+        vscodeFinalizaScript
         return
     }
 
@@ -1197,6 +1282,7 @@ function main()
         $cacheExpanded = "$CACHE_ROOT\$localVer"
         $cacheFolder = "$cacheExpanded\vscode"
         mainRestaurar $cacheFolder $VSCODE_HOME  $VSCODE_WORKSPACE $USER_FOLDER
+        vscodeFinalizaScript
         return
     }
 
@@ -1219,6 +1305,7 @@ function main()
 
         mainCrearRestaurar $zipPath $CACHE_ROOT $cacheExpanded $cacheFolder $VSCODE_HOME $VSCODE_WORKSPACE $USER_FOLDER $exe7z
 
+        vscodeFinalizaScript
         return
     }
 
@@ -1227,9 +1314,11 @@ function main()
     {
         # descargo, creo y restauro cache
         mainDescargarCrearRestaurar $remoteUrl $DOWNLOAD_FOLDER $remoteVer $remoteMD5 $CACHE_ROOT $VSCODE_HOME $VSCODE_WORKSPACE $USER_FOLDER $exe7z
+        vscodeFinalizaScript
         return
     }
 }
 
 # LLAMO A MAIN
 main
+pressAnyKey
