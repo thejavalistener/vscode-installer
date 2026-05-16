@@ -1073,6 +1073,31 @@ function mainObtener7z($toolsRoot, $szConfig)
     return $ret
 }
 
+function vscodeCompararVersiones($localVer, $remoteVer)
+{
+    $local  = [regex]::Match($localVer,  '(\d+)\.(\d+)\.(\d+)')
+    $remote = [regex]::Match($remoteVer, '(\d+)\.(\d+)\.(\d+)')
+
+    if (!$local.Success -or !$remote.Success)
+    {
+        return 0
+    }
+
+    $localMajor  = [int]$local.Groups[1].Value
+    $localMinor  = [int]$local.Groups[2].Value
+    $localPatch  = [int]$local.Groups[3].Value
+
+    $remoteMajor = [int]$remote.Groups[1].Value
+    $remoteMinor = [int]$remote.Groups[2].Value
+    $remotePatch = [int]$remote.Groups[3].Value
+
+    if ($remoteMajor -gt $localMajor) { return 3 } # critica
+    if ($remoteMinor -gt $localMinor) { return 2 } # importante
+    if ($remotePatch -gt $localPatch) { return 1 } # menor
+
+    return 0 # no hay actualizacion
+}
+
 function vscodeVerificarActualizaciones($manifest, $localVer)
 {    
     cStep "Buscando actualizaciones."
@@ -1098,15 +1123,14 @@ function vscodeVerificarActualizaciones($manifest, $localVer)
 
     if ($null -ne $localVer)
     {
-        if ($remoteVer -eq $localVer)
+        $tipoAct = vscodeCompararVersiones $localVer $remoteVer
+
+        switch ($tipoAct)
         {
-            # cache = remoteVer => actualizado
-            cInfo " --> No hay actualizaciones. Version actual: $localVer."
-        }
-        else
-        {
-            # hay actualizaciones
-            cInfo " --> Actualizacion disponible: $localVer -> $remoteVer."
+            0 { cInfo " --> No hay actualizaciones. Version actual: $localVer." }
+            1 { cInfo " --> Actualizacion disponible (menor): $localVer -> $remoteVer." }
+            2 { cWarn " --> Actualizacion disponible (IMPORTANTE): $localVer -> $remoteVer." }
+            3 { cWarn " --> Actualizacion disponible (CRITICA): $localVer -> $remoteVer." }
         }
     }
     else
@@ -1230,7 +1254,7 @@ function main()
 
     # leo el manifest 
     $manifest = vscodeObtenerManifest $MANIFEST_URL 
-    #$manifest.active_env = "test"
+#   $manifest.active_env = "test" #HARDCODEO test PARA DESARROLLO
     vscodeVerificarActualizacionesScript $manifest
 
     # informo sobre las posibles actualizaciones
@@ -1321,4 +1345,3 @@ function main()
 
 # LLAMO A MAIN
 main
-pressAnyKey
