@@ -1214,20 +1214,20 @@ function vscodeVerificarActualizacionesScript($manifest)
         return
     }
 
-    $localDate = (Get-Item -LiteralPath $scriptPath).LastWriteTime
-    $localDate = [datetime]::ParseExact($localDate.ToString("yyyy-MM-dd_HH:mm"), "yyyy-MM-dd_HH:mm", $null)
+    #$localDate = (Get-Item -LiteralPath $scriptPath).LastWriteTime
+    #$localDate = [datetime]::ParseExact($localDate.ToString("yyyy-MM-dd_HH:mm"), "yyyy-MM-dd_HH:mm", $null)
+    #
+    #$remoteDate = [datetime]::ParseExact($manifest.script.last_update,"yyyy-MM-dd_HH:mm",$null)
 
-    $remoteDate = [datetime]::ParseExact(
-        $manifest.script.last_update,
-        "yyyy-MM-dd_HH:mm",
-        $null
-    )
+    $remoteDate = [datetime]::ParseExact($manifest.script.last_update,"yyyy-MM-dd_HH:mm",$null)
+    $localDate = (Get-Item -LiteralPath $scriptPath).LastWriteTime
+    $localDate = $localDate.AddSeconds(-$localDate.Second).AddMilliseconds(-$localDate.Millisecond)
 
     if ($remoteDate -gt $localDate)
     {
         cWarn " --> Nueva version del script disponible en:"
         $url = $manifest.script.url 
-        cWarn " --> $url"
+        cWarn "     $url"
         $url | Set-Clipboard
         cInfo " --> Se copio la direccion al clipboard."
     }
